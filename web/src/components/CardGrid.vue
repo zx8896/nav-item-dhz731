@@ -5,6 +5,7 @@
          class="link-item"
          :class="{ dragging: dragId === card.id }"
          :data-id="String(card.id)"
+         :data-card-id="String(card.id)"
          :style="getCardStyle(index)"
          :draggable="isAdmin"
          @dragstart="onDragStart($event, card)"
@@ -22,34 +23,37 @@ import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
 
 const props = defineProps({
   cards: { type: Array, default: () => [] },
-  // ===== 新增：标识所属菜单，用于排序持久化 =====
   menuKey: { type: String, default: '' }
 });
 const emit = defineEmits(['reorder']);
 
-/* ================= 新增：管理模式 + 拖动排序 ================= */
+/* ================= 管理模式 + 拖动排序（D1 持久化） ================= */
 const isAdmin = ref(!!localStorage.getItem('token'));
 const dragId = ref(null);
 const localCards = ref([]);
 
 function checkAdmin() { isAdmin.value = !!localStorage.getItem('token'); }
+
+// 本地兜底 key（D1 写入失败时仍保留体验；成功后会与 D1 一致）
 function orderKey() { return 'nav_order_' + (props.menuKey || 'default'); }
-function getSavedOrder() {
-  try { return JSON.parse(localStorage.getItem(orderKey()) || 'null'); } catch (e) { return null; }
-}
-function persistOrder() {
-  localStorage.setItem(orderKey(), JSON.stringify(localCards.value.map(c => String(c.id))));
-  emit('reorder', localCards.value.map((c, i) => ({ id: c.id, sort: i })));
-}
 
 watch(() => props.cards, (val) => {
-  localCards.value = val ? [...val] : [];
-  const saved = getSavedOrder();
-  if (saved && Array.isArray(saved) && saved.length === localCards.value.length) {
-    const map = new Map(localCards.value.map(c => [String(c.id), c]));
-    const ordered = saved.map(id => map.get(String(id))).filter(Boolean);
-    if (ordered.length === localCards.value.length) localCards.value = ordered;
+  if (!val) { localCards.value = []; return; }
+  // 优先按 D1 的 order 字段排序（服务端权威）
+  let arr = [...val].sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+  // 若所有 order 都是 0/缺失（旧数据），则用本地缓存兜底
+  const hasOrder = arr.some(c => Number(c.order) > 0);
+  if (!hasOrder) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(orderKey()) || 'null');
+      if (saved && Array.isArray(saved) && saved.length === arr.length) {
+        const map = new Map(arr.map(c => [String(c.id), c]));
+        const ordered = saved.map(id => map.get(String(id))).filter(Boolean);
+        if (ordered.length === arr.length) arr = ordered;
+      }
+    } catch (_e) {}
   }
+  localCards.value = arr;
 }, { deep: true, immediate: true });
 
 function onDragStart(e, card) {
@@ -57,7 +61,7 @@ function onDragStart(e, card) {
   dragId.value = card.id;
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', String(card.id));
-  window.__navCard = { card, menuKey: props.menuKey }; // 供 MenuBar 跨标题移动读取
+  window.__navCard = { card, menuKey: props.menuKey };
   requestAnimationFrame(() => e.target.classList.add('dragging'));
 }
 function onDragEnd() {
@@ -84,16 +88,20 @@ function onGridDrop(e) {
   const [moved] = arr.splice(from, 1);
   arr.splice(to, 0, moved);
   localCards.value = arr;
-  persistOrder();
+  // 新顺序：order 按索引 0,1,2...
+  const ordered = arr.map((c, i) => ({ id: c.id, order: i }));
+  // 本地兜底
+  localStorage.setItem(orderKey(), JSON.stringify(arr.map(c => String(c.id))));
+  // 交给 Home.vue 写回 D1
+  emit('reorder', ordered);
 }
 
-// 卡片被移动到其它标题后，本网格立即移除它
 function onCardMoved(e) {
   const cardId = e.detail && e.detail.cardId;
   if (!cardId) return;
   if (localCards.value.some(c => String(c.id) === String(cardId))) {
     localCards.value = localCards.value.filter(c => String(c.id) !== String(cardId));
-    persistOrder();
+    localStorage.setItem(orderKey(), JSON.stringify(localCards.value.map(c => String(c.id))));
   }
 }
 onMounted(() => {
@@ -107,7 +115,7 @@ onUnmounted(() => {
   window.removeEventListener('auth:unauthorized', checkAdmin);
   window.removeEventListener('storage', checkAdmin);
 });
-/* ================= 新增结束 ================= */
+/* ================= 管理模式结束 ================= */
 
 /* ================= 原代码：动画 ================= */
 const animationClass = ref('');
@@ -261,12 +269,12 @@ function truncate(str) {
   min-height: 1.5em;
 }
 
-/* ===== 新增：管理拖动样式 ===== */
+/* 管理拖动样式 */
 .admin-drag .link-item { cursor: grab; }
 .admin-drag .link-item:active { cursor: grabbing; }
 .link-item.dragging { opacity: .35; border: 2px dashed #399dff; }
 
-/* ===== 以下为原有动画样式（原样保留） ===== */
+/* 原有动画样式 */
 .animate-slideUp .link-item { animation: slideUpIn 0.6s ease-out forwards; opacity: 0; transform: translateY(30px); }
 @keyframes slideUpIn { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
 .animate-radial .link-item { animation: radialIn 0.5s ease-out forwards; opacity: 0; transform: scale(0.3); }
