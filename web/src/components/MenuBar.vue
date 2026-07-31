@@ -82,7 +82,7 @@ async function onMenuDrop(menu, sub) {
   try {
     const data = { ...card };
     delete data.id; // id 走 URL 参数
-    await updateCard(card.id, { ...data, menuId: menu.id, subMenuId: newSubId });
+    await updateCard(card.id, { ...data, menuId: menu.id, subMenuId: newSubId, order: Date.now() });
     // 通知各网格刷新（移除已移动的卡片）
     window.dispatchEvent(new CustomEvent('nav:card-moved', {
       detail: { cardId: card.id, menuId: menu.id, subMenuId: newSubId }
