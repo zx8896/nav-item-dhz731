@@ -1,11 +1,15 @@
 <template>
   <div class="home-container" :style="bgStyle">
+    <!-- ① 新增：左上角天气 + 右上角时钟/春节倒计时 -->
+    <WeatherClock />
+
     <div class="menu-bar-fixed">
       <MenuBar 
         :menus="menus" 
         :activeId="activeMenu?.id" 
         :activeSubMenuId="activeSubMenu?.id"
         @select="selectMenu"
+        @card-moved="onCardMovedToMenu"
       />
     </div>
     
@@ -52,7 +56,8 @@
       </a>
     </div>
     
-    <CardGrid :cards="filteredCards"/>
+    <!-- ② 新增：menu-key 让每个菜单的排序独立保存；@reorder 可写回 D1 -->
+    <CardGrid :cards="filteredCards" :menu-key="menuKey" @reorder="onReorder"/>
     
     <footer class="footer">
       <div class="footer-content">
@@ -111,9 +116,10 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { getMenus, getCards, getAds, getFriends } from '../api';
+import { getMenus, getCards, getAds, getFriends, updateCard } from '../api';
 import MenuBar from '../components/MenuBar.vue';
 import CardGrid from '../components/CardGrid.vue';
+import WeatherClock from '../components/WeatherClock.vue';   // ③ 新增
 
 const menus = ref([]);
 const activeMenu = ref(null);
@@ -153,6 +159,34 @@ const bgStyle = computed(() => {
   if (!bgUrl.value) return {};
   return { backgroundImage: `url('${bgUrl.value}')` };
 });
+
+/* ================= ④ 新增：当前菜单的唯一标识（排序按此分开保存） ================= */
+const menuKey = computed(() => `${activeMenu.value?.id || ''}-${activeSubMenu.value?.id || ''}`);
+
+/**
+ * ⑤ 新增：网格内拖动排序后，把新顺序写回 D1（可选，需 cards 表有 sort_order 字段）
+ */
+async function onReorder(list) {
+  for (const { id, sort } of list) {
+    try {
+      const card = cards.value.find(c => String(c.id) === String(id));
+      if (card) await updateCard(id, { ...card, sort_order: sort });
+    } catch (_e) { /* 网络错误忽略，本地顺序已保存 */ }
+  }
+}
+
+/**
+ * ⑥ 新增：卡片被拖到其它标题后，若目标就是当前菜单则重新拉取
+ */
+function onCardMovedToMenu({ card, menuId, subMenuId }) {
+  if (!activeMenu.value) return;
+  if (String(activeMenu.value.id) === String(menuId)) {
+    const targetIsCurrent = 
+      (subMenuId == null && !activeSubMenu.value) ||
+      (subMenuId != null && activeSubMenu.value && String(activeSubMenu.value.id) === String(subMenuId));
+    if (targetIsCurrent) loadCards();
+  }
+}
 
 // 聚合搜索配置
 const searchEngines = [
@@ -212,19 +246,15 @@ onMounted(async () => {
     const settingsData = await settingsRes.json();
     if (settingsData.code === 200 && settingsData.data) {
       const s = settingsData.data;
-      // 缓存到 localStorage 供下次加载时同步读取
       localStorage.setItem('siteSettings', JSON.stringify(s));
-      // 动态背景图：移动端优先使用移动端图，无则回退桌面端
       if (isMobile() && s.bg_mobile_value) {
         bgUrl.value = s.bg_mobile_value;
       } else if (s.bg_desktop_value) {
         bgUrl.value = s.bg_desktop_value;
       }
-      // 动态站点名称
       if (s.site_name) {
         document.title = s.site_name;
       }
-      // 动态 Favicon
       if (s.favicon_url) {
         const link = document.querySelector('link[rel="icon"]');
         if (link) link.href = s.favicon_url;
@@ -306,16 +336,31 @@ function handleLogoError(event) {
 </script>
 
 <style scoped>
+/* ========== 原样式全部保留，仅新增 2 条（可放在文件末尾） ========== */
+
+/* ⑦ 新增：让顶部菜单栏让出左右空间，不与天气/时钟重叠 */
+.menu-bar-fixed {
+  padding: 0 15rem;
+}
+@media (max-width: 768px) {
+  .menu-bar-fixed {
+    padding: 0 0.5rem;
+  }
+}
+
+/* ⑧ 新增：CardGrid 容器顶部留一点间距，避免卡片贴住悬浮栏 */
+:deep(.card-grid) {
+  margin-top: .5rem;
+}
+
+/* ========== 以下为原有样式（原样保留） ========== */
 .menu-bar-fixed {
   position: fixed;
   top: .6rem;
   left: 0;
   width: 100vw;
   z-index: 100;
-  /* background: rgba(0,0,0,0.6); /* 可根据需要调整 */
-  /* backdrop-filter: blur(8px);  /*  毛玻璃效果 */
 }
-
 .search-engine-select {
   display: flex;
   flex-direction: row;
@@ -338,7 +383,6 @@ function handleLogoError(event) {
   color: #399dff;
   background: #ffffff1a;
 }
-
 .search-container {
   display: flex;
   align-items: center;
@@ -351,7 +395,6 @@ function handleLogoError(event) {
   width: 92%;
   position: relative;
 }
-
 .search-input {
   flex: 1;
   border: none;
@@ -361,11 +404,9 @@ function handleLogoError(event) {
   color: #ffffff;
   outline: none;
 }
-
 .search-input::placeholder {
   color: #999;
 }
-
 .clear-btn {
   background: none;
   border: none;
@@ -376,7 +417,6 @@ function handleLogoError(event) {
   align-items: center;
   padding: 0;
 }
-
 .search-btn {
   background: #e9e9eb00;
   color: #ffffff;
@@ -391,14 +431,11 @@ function handleLogoError(event) {
   transition: background 0.2s;
   margin-right: 0.1rem;
 }
-
 .search-btn:hover {
   background: #3367d6;
 }
-
 .home-container {
   min-height: 95vh;
-  /* NOTE: 不设默认 background-image，由 JS 同步从 localStorage 初始化，避免闪烁 */
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -408,7 +445,6 @@ function handleLogoError(event) {
   position: relative;
   padding-top: 50px; 
 }
-
 .home-container::before {
   content: '';
   position: absolute;
@@ -419,7 +455,6 @@ function handleLogoError(event) {
   background: rgba(0, 0, 0, 0.3);
   z-index: 1;
 }
-
 .search-section {
   display: flex;
   flex-direction: column;
@@ -429,7 +464,6 @@ function handleLogoError(event) {
   position: relative;
   z-index: 2;
 }
-
 .search-box-wrapper {
   display: flex;
   flex-direction: column;
@@ -437,7 +471,6 @@ function handleLogoError(event) {
   width: 100%;
   max-width: 480px;
 }
-
 .content-wrapper {
   display: flex;
   max-width: 1400px;
@@ -448,12 +481,10 @@ function handleLogoError(event) {
   flex: 1;
   justify-content: space-between;
 }
-
 .main-content {
   flex: 1;
   min-width: 0;
 }
-
 .ad-space {
   width: 90px;
   min-width: 60px;
@@ -479,7 +510,6 @@ function handleLogoError(event) {
   object-fit: contain;
   margin: 0 auto;
 }
-
 .ad-placeholder {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
@@ -495,7 +525,6 @@ function handleLogoError(event) {
   align-items: center;
   justify-content: center;
 }
-
 .footer {
   margin-top: auto;
   text-align: center;
@@ -504,14 +533,12 @@ function handleLogoError(event) {
   position: relative;
   z-index: 2;
 }
-
 .footer-content {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 50px;
 }
-
 .friend-link-btn {
   display: flex;
   align-items: center;
@@ -524,13 +551,10 @@ function handleLogoError(event) {
   font-size: 14px;
   padding: 0;
 }
-
 .friend-link-btn:hover {
   color: #1976d2;
   transform: translateY(-1px);
 }
-
-/* 弹窗样式 */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -544,7 +568,6 @@ function handleLogoError(event) {
   z-index: 1000;
   backdrop-filter: blur(5px);
 }
-
 .modal-content {
   background: #8585859c;
   border-radius: 16px;
@@ -557,7 +580,6 @@ function handleLogoError(event) {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }
-
 .modal-header {
   display: flex;
   align-items: center;
@@ -566,14 +588,12 @@ function handleLogoError(event) {
   border-bottom: 1px solid #e5e7eb;
   background: #d3d6d8;
 }
-
 .modal-header h3 {
   margin: 0;
   font-size: 24px;
   font-weight: 600;
   color: #111827;
 }
-
 .close-btn {
   background: none;
   border: none;
@@ -583,18 +603,15 @@ function handleLogoError(event) {
   color: #6b7280;
   transition: all 0.2s;
 }
-
 .close-btn:hover {
   background: #f3f4f6;
   color: #cf1313;
 }
-
 .modal-body {
   flex: 1;
   padding: 32px;
   overflow-y: auto;
 }
-
 .friend-links-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -604,12 +621,10 @@ function handleLogoError(event) {
   .friend-links-grid {
     grid-template-columns: repeat(3, 1fr);
   }
-
   .container {
     width: 95%;
   }
 }
-
 .friend-link-card {
   display: flex;
   flex-direction: column;
@@ -623,13 +638,11 @@ function handleLogoError(event) {
   border: 1px solid #cfd3d661;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
-
 .friend-link-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
   background: #ffffff8e;
 }
-
 .friend-link-logo {
   width: 48px;
   height: 48px;
@@ -642,13 +655,11 @@ function handleLogoError(event) {
   background: white;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
-
 .friend-link-logo img {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
-
 .friend-link-placeholder {
   width: 100%;
   height: 100%;
@@ -661,7 +672,6 @@ function handleLogoError(event) {
   font-weight: 600;
   border-radius: 8px;
 }
-
 .friend-link-info h4 {
   margin: 0;
   font-size: 13px;
@@ -671,7 +681,6 @@ function handleLogoError(event) {
   line-height: 1.3;
   word-break: break-all;
 }
-
 .copyright {
   color: rgba(255, 255, 255, 0.8);
   font-size: 14px;
@@ -686,17 +695,14 @@ function handleLogoError(event) {
 .footer-link:hover {
   color: #1976d2;
 }
-
 :deep(.menu-bar) {
   position: relative;
   z-index: 2;
 }
-
 :deep(.card-grid) {
   position: relative;
   z-index: 2;
 }
-
 .ad-space-fixed {
   position: fixed;
   top: 13rem;
@@ -729,36 +735,29 @@ function handleLogoError(event) {
   background: #fff;
   margin: 0 auto;
 }
-
 @media (max-width: 1200px) {
   .content-wrapper {
     flex-direction: column;
     gap: 1rem;
   }
-  
   .ad-space {
     width: 100%;
     height: 100px;
   }
-  
   .ad-placeholder {
     height: 80px;
   }
 }
-
 @media (max-width: 768px) {
   .home-container {
     padding-top: 80px;
   }
-  
   .content-wrapper {
     gap: 0.5rem;
   }
-  
   .ad-space {
     height: 60px;
   }
-  
   .ad-placeholder {
     height: 50px;
     font-size: 12px;
@@ -792,4 +791,4 @@ function handleLogoError(event) {
     gap: 20px;
   }
 }
-</style> 
+</style>
