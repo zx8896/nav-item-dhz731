@@ -1,6 +1,8 @@
 <template>
+  <WeatherClock />
   <router-view/>
 </template>
 
 <script setup>
-</script> 
+import WeatherClock from './components/WeatherClock.vue';
+</script>
