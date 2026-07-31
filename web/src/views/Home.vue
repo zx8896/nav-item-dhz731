@@ -57,7 +57,29 @@
     </div>
     
     <!-- ② 新增：menu-key 让每个菜单的排序独立保存；@reorder 可写回 D1 -->
-    <CardGrid :cards="filteredCards" :menu-key="menuKey" @reorder="onReorder"/>
+    <CardGrid :cards="filteredCards" :menu-key="menuKey" @reorder="/**
+ * 网格内拖动排序后，把新顺序写回 D1（cards 表的 "order" 字段）
+ * 注意：order 是 SQL 保留字，后端 SQL 里要写成 "order"
+ */
+async function onReorder(list) {
+  // list = [{ id, order: 0 }, { id, order: 1 }, ...]
+  const results = await Promise.allSettled(
+    list.map(({ id, order }) => {
+      const card = cards.value.find(c => String(c.id) === String(id));
+      if (!card) return Promise.resolve();
+      // 全量提交，避免后端字段缺失覆盖（如后端是 PATCH 只更新传入字段也可）
+      return updateCard(id, { ...card, order });
+    })
+  );
+  const failed = results.filter(r => r.status === 'rejected');
+  if (failed.length === 0) {
+    // 轻提示（复用 MenuBar 里的 toast，或直接 console）
+    console.log('✅ 排序已保存到 D1');
+  } else {
+    console.warn('⚠️ 部分排序保存失败（已存本地，刷新可能恢复原序）', failed);
+  }
+}
+"/>
     
     <footer class="footer">
       <div class="footer-content">
