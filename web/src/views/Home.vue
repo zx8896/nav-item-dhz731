@@ -1,6 +1,6 @@
 <template>
   <div class="home-container" :style="bgStyle">
-    <!-- ① 新增：左上角天气 + 右上角时钟/春节倒计时 -->
+    <!-- ① 天气时钟组件（内部固定在页面底部：左下天气 / 右下时钟） -->
     <WeatherClock />
 
     <div class="menu-bar-fixed">
@@ -9,7 +9,6 @@
         :activeId="activeMenu?.id" 
         :activeSubMenuId="activeSubMenu?.id"
         @select="selectMenu"
-        @card-moved="onCardMovedToMenu"
       />
     </div>
     
@@ -56,7 +55,7 @@
       </a>
     </div>
     
-    <!-- ② 新增：menu-key 让每个菜单的排序独立保存；@reorder 写回 D1（注意：这里是干净的属性绑定，onReorder 在 script 里定义） -->
+    <!-- ② CardGrid：menu-key 区分各菜单排序；@reorder 写回 D1 -->
     <CardGrid :cards="filteredCards" :menu-key="menuKey" @reorder="onReorder"/>
     
     <footer class="footer">
@@ -115,11 +114,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { getMenus, getCards, getAds, getFriends, updateCard } from '../api';   // ① 新增：updateCard
+import { ref, onMounted, computed, onUnmounted } from 'vue';
+import { getMenus, getCards, getAds, getFriends, updateCard } from '../api';
 import MenuBar from '../components/MenuBar.vue';
 import CardGrid from '../components/CardGrid.vue';
-import WeatherClock from '../components/WeatherClock.vue';   // ① 新增
+import WeatherClock from '../components/WeatherClock.vue';
 
 const menus = ref([]);
 const activeMenu = ref(null);
@@ -160,17 +159,16 @@ const bgStyle = computed(() => {
   return { backgroundImage: `url('${bgUrl.value}')` };
 });
 
-/* ② 新增：当前菜单的唯一标识（每个菜单的排序按此分开保存） */
+/* ① 当前菜单的唯一标识（每个菜单的排序按此分开保存） */
 const menuKey = computed(() => `${activeMenu.value?.id || ''}-${activeSubMenu.value?.id || ''}`);
 
-/* ② 新增：网格内拖动排序后，把新顺序写回 D1（cards 表的 "order" 字段） */
+/* ① 网格内拖动排序后，把新顺序写回 D1（cards 表的 "order" 字段） */
 async function onReorder(list) {
   // list = [{ id, order: 0 }, { id, order: 1 }, ...]
   const results = await Promise.allSettled(
     list.map(({ id, order }) => {
       const card = cards.value.find(c => String(c.id) === String(id));
       if (!card) return Promise.resolve();
-      // 全量提交，避免后端字段缺失覆盖
       return updateCard(id, { ...card, order });
     })
   );
@@ -182,9 +180,10 @@ async function onReorder(list) {
   }
 }
 
-/* ② 新增：卡片被拖到其它标题后，若目标就是当前菜单则重新拉取 */
-function onCardMovedToMenu({ card, menuId, subMenuId }) {
-  if (!activeMenu.value) return;
+/* ① 卡片被拖到其它标题后，若目标就是当前菜单则重新拉取 */
+function onCardMovedToMenu(e) {
+  const { cardId, menuId, subMenuId } = e.detail || {};
+  if (!activeMenu.value || !cardId) return;
   if (String(activeMenu.value.id) === String(menuId)) {
     const targetIsCurrent = 
       (subMenuId == null && !activeSubMenu.value) ||
@@ -251,19 +250,15 @@ onMounted(async () => {
     const settingsData = await settingsRes.json();
     if (settingsData.code === 200 && settingsData.data) {
       const s = settingsData.data;
-      // 缓存到 localStorage 供下次加载时同步读取
       localStorage.setItem('siteSettings', JSON.stringify(s));
-      // 动态背景图：移动端优先使用移动端图，无则回退桌面端
       if (isMobile() && s.bg_mobile_value) {
         bgUrl.value = s.bg_mobile_value;
       } else if (s.bg_desktop_value) {
         bgUrl.value = s.bg_desktop_value;
       }
-      // 动态站点名称
       if (s.site_name) {
         document.title = s.site_name;
       }
-      // 动态 Favicon
       if (s.favicon_url) {
         const link = document.querySelector('link[rel="icon"]');
         if (link) link.href = s.favicon_url;
@@ -272,6 +267,9 @@ onMounted(async () => {
   } catch (_e) {
     // ignore, use cached or default background
   }
+
+  // ① 监听卡片跨标题移动事件（CardGrid 内部触发）
+  window.addEventListener('nav:card-moved', onCardMovedToMenu);
 
   const res = await getMenus();
   menus.value = res.data;
@@ -286,6 +284,11 @@ onMounted(async () => {
   
   const friendRes = await getFriends();
   friendLinks.value = friendRes.data;
+});
+
+// ① 卸载时移除监听
+onUnmounted(() => {
+  window.removeEventListener('nav:card-moved', onCardMovedToMenu);
 });
 
 async function selectMenu(menu, parentMenu = null) {
@@ -351,11 +354,7 @@ function handleLogoError(event) {
   left: 0;
   width: 100vw;
   z-index: 100;
-  /* ① 新增：给顶部菜单让出左右空间，避免与天气/时钟悬浮块重叠 */
-  padding: 0 15rem;
-  box-sizing: border-box;
-  /* background: rgba(0,0,0,0.6); /* 可根据需要调整 */
-  /* backdrop-filter: blur(8px);  /*  毛玻璃效果 */
+  /* ① 不再加左右 padding（避免手机上标题被挤成竖排） */
 }
 
 .search-engine-select {
@@ -440,7 +439,6 @@ function handleLogoError(event) {
 
 .home-container {
   min-height: 95vh;
-  /* NOTE: 不设默认 background-image，由 JS 同步从 localStorage 初始化，避免闪烁 */
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -448,7 +446,8 @@ function handleLogoError(event) {
   display: flex;
   flex-direction: column;
   position: relative;
-  padding-top: 50px; 
+  padding-top: 50px;
+  padding-bottom: 86px;   /* ① 新增：给底部天气/时钟留出空间 */
 }
 
 .home-container::before {
@@ -791,6 +790,7 @@ function handleLogoError(event) {
 @media (max-width: 768px) {
   .home-container {
     padding-top: 80px;
+    padding-bottom: 96px;   /* ① 新增：手机端给底部悬浮条留更多空间 */
   }
   
   .content-wrapper {
