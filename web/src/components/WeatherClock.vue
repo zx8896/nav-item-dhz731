@@ -1,6 +1,6 @@
 <template>
   <div class="wc-bar">
-    <!-- 左上角：IP 归属地 + 天气 -->
+    <!-- 左下角：IP 归属地 + 天气 -->
     <div class="wc-weather" @click="loadWeather" title="点击刷新天气">
       <span class="wc-icon">{{ wIcon }}</span>
       <div class="wc-info">
@@ -8,7 +8,7 @@
         <div class="wc-temp">{{ wTemp }}°C <span class="wc-desc">{{ wDesc }}</span></div>
       </div>
     </div>
-    <!-- 右上角：日期时间 + 春节倒计时 -->
+    <!-- 右下角：日期时间 + 春节倒计时 -->
     <div class="wc-clock">
       <div class="wc-date">{{ dateStr }}</div>
       <div class="wc-time">{{ timeStr }}</div>
@@ -116,43 +116,66 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
 
 <style scoped>
 .wc-bar {
-  position: fixed; top: 0; left: 0; right: 0;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 9999;
-  display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 10px 16px;
-  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 14px calc(10px + env(safe-area-inset-bottom));
+  pointer-events: none;   /* 容器不挡点击，只有两个小卡片可点 */
   font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
 }
 .wc-weather {
   pointer-events: auto;
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: rgba(0, 0, 0, .38);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255,255,255,.14);
-  border-radius: 12px; padding: 7px 12px;
-  color: #fff; cursor: pointer; user-select: none; transition: .2s;
+  border-radius: 12px;
+  padding: 6px 11px;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  transition: .2s;
+  max-width: 46vw;
 }
 .wc-weather:hover { background: rgba(0,0,0,.55); }
-.wc-icon { font-size: 26px; line-height: 1; }
-.wc-loc { font-size: 12px; color: rgba(255,255,255,.78); }
-.wc-temp { font-size: 15px; font-weight: 700; line-height: 1.2; }
-.wc-desc { font-size: 11px; font-weight: 400; color: rgba(255,255,255,.7); }
+.wc-icon { font-size: 24px; line-height: 1; flex-shrink: 0; }
+.wc-loc { font-size: 12px; color: rgba(255,255,255,.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-temp { font-size: 15px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.wc-desc { font-size: 11px; font-weight: 400; color: rgba(255,255,255,.7); white-space: nowrap; }
 .wc-clock {
-  pointer-events: auto; text-align: right;
+  pointer-events: auto;
+  text-align: right;
   background: rgba(0, 0, 0, .38);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255,255,255,.14);
-  border-radius: 12px; padding: 7px 12px;
-  color: #fff; user-select: none;
+  border-radius: 12px;
+  padding: 6px 11px;
+  color: #fff;
+  user-select: none;
+  max-width: 52vw;
 }
-.wc-date { font-size: 12px; color: rgba(255,255,255,.78); }
-.wc-time { font-size: 20px; font-weight: 800; letter-spacing: 1px; font-variant-numeric: tabular-nums; line-height: 1.2; }
-.wc-cny { font-size: 11px; color: #ffd54d; font-weight: 600; margin-top: 1px; }
+.wc-date { font-size: 12px; color: rgba(255,255,255,.78); white-space: nowrap; }
+.wc-time { font-size: 19px; font-weight: 800; letter-spacing: 1px; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
+.wc-cny { font-size: 11px; color: #ffd54d; font-weight: 600; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 手机适配：整体缩小，贴住屏幕底部边缘 */
 @media (max-width: 768px) {
-  .wc-bar { padding: 6px 8px; }
-  .wc-icon { font-size: 20px; }
-  .wc-time { font-size: 15px; }
-  .wc-date, .wc-cny, .wc-loc, .wc-desc { font-size: 10px; }
-  .wc-weather, .wc-clock { padding: 5px 8px; }
+  .wc-bar { padding: 0 6px calc(6px + env(safe-area-inset-bottom)); }
+  .wc-weather { gap: 6px; padding: 5px 8px; border-radius: 10px; }
+  .wc-icon { font-size: 18px; }
+  .wc-loc { font-size: 10px; }
+  .wc-temp { font-size: 13px; }
+  .wc-desc { font-size: 10px; }
+  .wc-clock { padding: 5px 8px; border-radius: 10px; }
+  .wc-date { font-size: 10px; }
+  .wc-time { font-size: 14px; }
+  .wc-cny { font-size: 10px; }
 }
 </style>
