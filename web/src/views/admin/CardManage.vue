@@ -27,6 +27,8 @@
       <table class="card-table">
         <thead>
           <tr>
+            <th>归属菜单</th>
+            <th>归属子菜单</th>
             <th>标题</th>
             <th>网址</th>
             <th>Logo链接</th>
@@ -37,6 +39,31 @@
         </thead>
         <tbody>
           <tr v-for="card in cards" :key="card.id">
+            <!-- 归属主菜单下拉框 -->
+            <td>
+              <select
+                v-model="card.menu_id"
+                @change="onCardMenuChange(card)"
+                class="table-input归属-select"
+              >
+                <option v-for="menu in menus" :value="menu.id" :key="menu.id">{{ menu.name }}</option>
+              </select>
+            </td>
+            <!-- 归属子菜单下拉框 -->
+            <td>
+              <select
+                v-model="card.sub_menu_id"
+                @change="onCardSubMenuChange(card)"
+                class="table-input归属-select"
+              >
+                <option value="">无（主菜单）</option>
+                <option
+                  v-for="subMenu in getSubMenusForCard(card)"
+                  :value="subMenu.id"
+                  :key="subMenu.id"
+                >{{ subMenu.name }}</option>
+              </select>
+            </td>
             <td><input v-model="card.title" @blur="updateCard(card)" class="table-input" /></td>
             <td><input v-model="card.url" @blur="updateCard(card)" class="table-input" /></td>
             <td><input v-model="card.logo_url" @blur="updateCard(card)" class="table-input" placeholder="logo链接(可选)" /></td>
@@ -105,6 +132,29 @@ function onSubMenuChange() {
   loadCards();
 }
 
+// 获取卡片所属主菜单下的子菜单列表
+function getSubMenusForCard(card) {
+  if (!card.menu_id) return [];
+  const menu = menus.value.find(m => m.id === card.menu_id);
+  return menu?.subMenus || [];
+}
+
+// 当卡片的归属主菜单改变时
+async function onCardMenuChange(card) {
+  // 切换主菜单后，如果当前子菜单不属于新主菜单，则清空
+  const newSubMenus = getSubMenusForCard(card);
+  const hasSubMenu = newSubMenus.some(s => s.id === card.sub_menu_id);
+  if (!hasSubMenu) {
+    card.sub_menu_id = '';
+  }
+  await updateCard(card);
+}
+
+// 当卡片的归属子菜单改变时
+async function onCardSubMenuChange(card) {
+  await updateCard(card);
+}
+
 async function loadCards() {
   if (!selectedMenuId.value) return;
   const res = await getCards(selectedMenuId.value, selectedSubMenuId.value || null);
@@ -128,8 +178,8 @@ async function addCard() {
 
 async function updateCard(card) {
   await apiUpdateCard(card.id, {
-    menu_id: selectedMenuId.value,
-    sub_menu_id: selectedSubMenuId.value || null,
+    menu_id: card.menu_id,
+    sub_menu_id: card.sub_menu_id || null,
     title: card.title,
     url: card.url,
     logo_url: card.logo_url,
@@ -178,8 +228,6 @@ async function deleteCard(id) {
   letter-spacing: -0.5px;
 }
 
-
-
 .card-add {
   margin: 0 auto;
   display: flex;
@@ -193,7 +241,7 @@ async function deleteCard(id) {
   background: var(--admin-card-bg, white);
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
+  overflow-x: auto; /* 允许横向滚动 */
   width: 100%;
 }
 
@@ -201,6 +249,7 @@ async function deleteCard(id) {
   width: 100%;
   border-collapse: collapse;
   padding: 24px;
+  min-width: 1000px; /* 保证表格在小屏幕上也能横向滚动 */
 }
 
 .card-table th,
@@ -217,34 +266,44 @@ async function deleteCard(id) {
 }
 
 /* 表格列宽度设置 */
-.card-table th:nth-child(1), /* 标题列 */
+.card-table th:nth-child(1), /* 归属菜单列 */
 .card-table td:nth-child(1) {
-  width: 12%;
+  width: 14%;
 }
 
-.card-table th:nth-child(2), /* 网址列 */
+.card-table th:nth-child(2), /* 归属子菜单列 */
 .card-table td:nth-child(2) {
-  width: 25%;
+  width: 14%;
 }
 
-.card-table th:nth-child(3), /* Logo链接列 */
+.card-table th:nth-child(3), /* 标题列 */
 .card-table td:nth-child(3) {
-  width: 25%;
+  width: 10%;
 }
 
-.card-table th:nth-child(4), /* 描述列 */
+.card-table th:nth-child(4), /* 网址列 */
 .card-table td:nth-child(4) {
-  width: 15%;
+  width: 20%;
 }
 
-.card-table th:nth-child(5), /* 排序列 */
+.card-table th:nth-child(5), /* Logo链接列 */
 .card-table td:nth-child(5) {
-  width: 8%;
+  width: 15%;
 }
 
-.card-table th:nth-child(6), /* 操作列 */
+.card-table th:nth-child(6), /* 描述列 */
 .card-table td:nth-child(6) {
-  width: 15%;
+  width: 10%;
+}
+
+.card-table th:nth-child(7), /* 排序列 */
+.card-table td:nth-child(7) {
+  width: 6%;
+}
+
+.card-table th:nth-child(8), /* 操作列 */
+.card-table td:nth-child(8) {
+  width: 10%;
   text-align: center;
 }
 
@@ -258,17 +317,12 @@ async function deleteCard(id) {
   transition: all 0.2s ease;
 }
 
-/* 窄输入框 - 主菜单、子菜单、卡片标题 */
+/* 窄输入框 */
 .input.narrow {
   width: 140px;
 }
 
-/* 中等输入框 - 添加卡片按钮 */
-.input.medium {
-  width: 140px;
-}
-
-/* 宽输入框 - 卡片链接、logo链接 */
+/* 宽输入框 */
 .input.wide {
   width: 200px;
 }
@@ -299,6 +353,25 @@ async function deleteCard(id) {
 
 .order-input {
   width: 60px;
+}
+
+/* 归属下拉框样式 */
+.归属-select {
+  width: 100%;
+  padding: 6px 4px;
+  border-radius: 6px;
+  border: 1px solid var(--admin-border, #e2e8f0);
+  background: var(--admin-input-bg, #fff);
+  color: var(--admin-text, #222);
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.归属-select:focus {
+  outline: none;
+  border-color: #399dff;
+  box-shadow: 0 0 0 2px rgba(57, 157, 255, 0.1);
 }
 
 .btn {
@@ -354,7 +427,6 @@ async function deleteCard(id) {
   }
   
   .input.narrow,
-  .input.medium,
   .input.wide {
     width: 100%;
   }
@@ -362,21 +434,5 @@ async function deleteCard(id) {
   .order-input {
     width: 60px;
   }
-  
-  /* 移动端表格列宽度调整 */
-  .card-table th:nth-child(1),
-  .card-table td:nth-child(1),
-  .card-table th:nth-child(2),
-  .card-table td:nth-child(2),
-  .card-table th:nth-child(3),
-  .card-table td:nth-child(3),
-  .card-table th:nth-child(4),
-  .card-table td:nth-child(4),
-  .card-table th:nth-child(5),
-  .card-table td:nth-child(5),
-  .card-table th:nth-child(6),
-  .card-table td:nth-child(6) {
-    width: auto;
-  }
 }
-</style> 
+</style>
